@@ -1,0 +1,16 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# data from experiments
+data/
+
+# Workspace com os notebooks específicos de cada sujeito
+analysis_workspace/
