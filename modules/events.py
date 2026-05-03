@@ -119,3 +119,61 @@ def get_events_time_tms(events, event_id, s_freq):
     tms_pulse_interval_task_rest = np.array(tms_pulse_interval_task_rest)
 
     return tms_pulse_interval_rest_prep, tms_pulse_interval_prep_task, tms_pulse_interval_task_rest
+
+
+def get_events_tms_per_task(events, event_id):
+    tms_pulse_right = []
+    tms_pulse_left = []
+    tms_pulse_bilateral = []
+
+    state_event_ids = [event_id[state] for state in states_protocol]
+    task_event_ids = {
+        event_id["task_right"],
+        event_id["task_left"],
+        event_id["task_bilateral"],
+    }
+
+    def get_previous_state(event_index):
+        for state_id in range(event_index - 1, -1, -1):
+            if events[state_id][2] in state_event_ids:
+                return events[state_id], state_id
+        return None, None
+
+    for id, event in enumerate(events):
+        if event[2] != event_id["tms_pulse"]:
+            continue
+
+        previous_state, previous_state_id = get_previous_state(id)
+        if previous_state is None:
+            continue
+
+        if previous_state[2] == event_id["task_right"]:
+            tms_pulse_right.append(event[0])
+        elif previous_state[2] == event_id["task_left"]:
+            tms_pulse_left.append(event[0])
+        elif previous_state[2] == event_id["task_bilateral"]:
+            tms_pulse_bilateral.append(event[0])
+
+    tms_pulse_right = np.array(tms_pulse_right).astype(int)
+    tms_pulse_left = np.array(tms_pulse_left).astype(int)
+    tms_pulse_bilateral = np.array(tms_pulse_bilateral).astype(int)
+
+    events_left = np.column_stack((
+    tms_pulse_left,
+    np.zeros(len(tms_pulse_left), dtype=int),
+    np.ones(len(tms_pulse_left), dtype=int)  # event_id = 1
+    ))
+
+    events_right = np.column_stack((
+    tms_pulse_right,
+    np.zeros(len(tms_pulse_right), dtype=int),
+    np.ones(len(tms_pulse_right), dtype=int)  # event_id = 1
+    ))
+
+    events_bilateral = np.column_stack((
+    tms_pulse_bilateral,
+    np.zeros(len(tms_pulse_bilateral), dtype=int),
+    np.ones(len(tms_pulse_bilateral), dtype=int)  # event_id = 1
+    ))
+
+    return events_left, events_right, events_bilateral
