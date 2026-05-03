@@ -10,7 +10,8 @@ wheels/
 .venv
 
 # data from experiments
-data/
+data/raw/
+data/derivatives/
 
 # Workspace com os notebooks específicos de cada sujeito
 analysis_workspace/
