@@ -122,9 +122,10 @@ def get_events_time_tms(events, event_id, s_freq):
 
 
 def get_events_tms_per_task(events, event_id):
-    tms_pulse_right = []
-    tms_pulse_left = []
-    tms_pulse_bilateral = []
+    tms_pulse_task = []
+    events_id = {"tms_pulse_task_right": 1,
+                 "tms_pulse_task_left": 2,
+                 "tms_pulse_task_bilateral": 3}
 
     state_event_ids = [event_id[state] for state in states_protocol]
     task_event_ids = {
@@ -148,32 +149,10 @@ def get_events_tms_per_task(events, event_id):
             continue
 
         if previous_state[2] == event_id["task_right"]:
-            tms_pulse_right.append(event[0])
+            tms_pulse_task.append([event[0], 0, 1])
         elif previous_state[2] == event_id["task_left"]:
-            tms_pulse_left.append(event[0])
+            tms_pulse_task.append([event[0], 0, 2])
         elif previous_state[2] == event_id["task_bilateral"]:
-            tms_pulse_bilateral.append(event[0])
+            tms_pulse_task.append([event[0], 0, 3])
 
-    tms_pulse_right = np.array(tms_pulse_right).astype(int)
-    tms_pulse_left = np.array(tms_pulse_left).astype(int)
-    tms_pulse_bilateral = np.array(tms_pulse_bilateral).astype(int)
-
-    events_left = np.column_stack((
-    tms_pulse_left,
-    np.zeros(len(tms_pulse_left), dtype=int),
-    np.ones(len(tms_pulse_left), dtype=int)  # event_id = 1
-    ))
-
-    events_right = np.column_stack((
-    tms_pulse_right,
-    np.zeros(len(tms_pulse_right), dtype=int),
-    np.ones(len(tms_pulse_right), dtype=int)  # event_id = 1
-    ))
-
-    events_bilateral = np.column_stack((
-    tms_pulse_bilateral,
-    np.zeros(len(tms_pulse_bilateral), dtype=int),
-    np.ones(len(tms_pulse_bilateral), dtype=int)  # event_id = 1
-    ))
-
-    return events_left, events_right, events_bilateral
+    return np.array(tms_pulse_task), events_id
