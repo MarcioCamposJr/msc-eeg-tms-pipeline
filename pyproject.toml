@@ -3,13 +3,16 @@ name = "experimentms-processing"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "ipykernel>=6.31.0",
     "mne>=1.8.0",
+    "mne-connectivity>=0.8.1",
     "mne-icalabel>=0.7.0",
     "pyqt6>=6.10.2",
+    "pytep-sound-sspsir==0.1.2",
     "scikit-learn>=1.6.1",
+    "scot>=0.2.1",
     "seaborn>=0.13.2",
     "torch>=2.8.0",
 ]
