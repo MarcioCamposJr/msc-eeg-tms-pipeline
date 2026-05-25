@@ -128,11 +128,6 @@ def get_events_tms_per_task(events, event_id):
                  "tms_pulse_task_bilateral": 3}
 
     state_event_ids = [event_id[state] for state in states_protocol]
-    task_event_ids = {
-        event_id["task_right"],
-        event_id["task_left"],
-        event_id["task_bilateral"],
-    }
 
     def get_previous_state(event_index):
         for state_id in range(event_index - 1, -1, -1):
