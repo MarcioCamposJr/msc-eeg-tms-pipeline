@@ -1,9 +1,18 @@
+import mne
 from mne.preprocessing import ICA
 from mne_icalabel import label_components
 
 class ICAProcessor:
-    def __init__(self, random_state=97, max_iter=800, method="infomax"):
-        self.ica = ICA(random_state=random_state, max_iter=max_iter, method=method)
+    def __init__(self, n_components=0.99, random_state=97, max_iter='auto', method="picard"):
+        fit_params = dict(extended=True) if method == "infomax" else None
+        
+        self.ica = ICA(
+            n_components=n_components, 
+            random_state=random_state, 
+            max_iter=max_iter, 
+            method=method, 
+            fit_params=fit_params
+        )
         self.fitted = False
 
     def fit(self, epoch):
@@ -21,14 +30,30 @@ class ICAProcessor:
     def __ica_labels(self, method="iclabel"):
         if not self.fitted:
             raise RuntimeError("ICA must be fitted before labeling components.")
+
         return label_components(self.epoch, self.ica, method=method)
     
-    def get_exclude_components(self, method="iclabel", threshold=0.5):
-        labels = self.__ica_labels(method=method)
-        exclude = [i for i, prob in enumerate(labels["y_pred_proba"]) if prob > threshold]
+    def get_exclude_components(self, method="iclabel", threshold=0.80):
+
+        labels_dict = self.__ica_labels(method=method)
+        labels = labels_dict["labels"]
+        probs = labels_dict["y_pred_proba"]
+        
+        exclude = []
+        print(f"Avaliable componentes found: {labels}")
+        for i, (label, prob) in enumerate(zip(labels, probs)):
+            if label in ['eye blink', 'muscle artifact'] and prob >= threshold:
+                exclude.append(i)
+                print(f"-> Componente {i} excluída: {label} (Probabilidade: {prob:.2f})")
+            else:
+                pass 
+                
         evoked = self.epoch.average()
         self.ica.plot_overlay(evoked, exclude=exclude, picks="eeg")
-        self.ica.plot_properties(self.epoch, picks=exclude, verbose=False)
+        
+        if exclude: 
+            self.ica.plot_properties(self.epoch, picks=exclude, verbose=False)
+            
         return exclude
     
     def apply_ica(self, exclude):

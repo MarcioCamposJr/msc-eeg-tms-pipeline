@@ -12,6 +12,7 @@ dependencies = [
     "mne-icalabel>=0.7.0",
     "pyqt6>=6.10.2",
     "pytep-sound-sspsir==0.1.2",
+    "python-picard>=0.8.2",
     "scikit-learn>=1.6.1",
     "scot>=0.2.1",
     "seaborn>=0.13.2",

@@ -17,8 +17,8 @@ class mvar_optimized():
         self.result_var = None
         self.optimal_order = None
     
-    def find_order_delta(self, min_p=7, max_p=25, deltas = [0.001, 0.01, 0.1]):
-        best_p, best_delta, best_bic = None, None, np.inf
+    def find_order_delta(self, min_p=7, max_p=25, deltas = [0.001, 0.01, 0.1], top_k=5):
+        results = []
 
         for delta in deltas:
             for p in range(min_p, max_p + 1):
@@ -32,13 +32,17 @@ class mvar_optimized():
                 )
                 bic = calculate_bic(var_test_cv, mvar_reults, self.data.shape[2], self.data.shape[0])
                 print(f"p={p:>2}, delta={delta:.3f}, BIC={bic:.4f}")
-                if bic < best_bic:
-                    best_bic = bic
-                    best_p = var_test_cv.p
-                    best_delta = delta
+                results.append((bic, p, delta))
         
-        print(f"Best order: {best_p} with delta: {best_delta} and BIC value: {best_bic}")
-        return best_p, best_delta
+        # Sort results by BIC in ascending order (lower is better)
+        results.sort(key=lambda x: x[0])
+        top_results = results[:top_k]
+        
+        print(f"\nTop {len(top_results)} results:")
+        for i, (bic, p, delta) in enumerate(top_results, 1):
+            print(f"{i}. Order: {p} with delta: {delta} and BIC value: {bic:.4f}")
+        
+        return [{"order": p, "delta": delta, "bic": bic} for bic, p, delta in top_results]
     
     def fit_model(self, optimal_order, delta):
         var_base = VAR(model_order=optimal_order, delta=delta)
@@ -122,3 +126,25 @@ class mvar_optimized():
         real_validated_matric[~s_fdr] = 0.0 
 
         return real_validated_matric
+    
+    def bootstrap_connectivity(self, measure='PDC', n_bootstraps=300, nfft=512):
+        if not self.fitted:
+            raise ValueError("Model must be fitted before performing bootstrap analysis.")
+        
+        var_eeg = self.result_var.a
+
+        print(f"Performing bootstrap connectivity analysis with {n_bootstraps} bootstraps...")
+        bootstrap_results = surrogate_connectivity(
+            measure_names=[measure], 
+            data=self.data,      
+            var=var_eeg,
+            nfft=nfft, 
+            repeats=n_bootstraps,
+            method='bootstrap'
+        )
+
+        # Calcula os limites (2.5% e 97.5% criam um intervalo de 95%)
+        ci_lower = np.percentile(bootstrap_results[measure], 2.5, axis=0)
+        ci_upper = np.percentile(bootstrap_results[measure], 97.5, axis=0)
+
+        return bootstrap_results[measure], ci_lower, ci_upper
