@@ -162,7 +162,13 @@ def get_events_tms_per_task(events, event_id):
         if previous_state is None:
             continue
 
-        associated_task_id = get_associated_task(id)
+        state_id_val = previous_state[2]
+
+        if state_id_val in task_event_ids:
+            associated_task_id = state_id_val
+        else:
+            associated_task_id = get_associated_task(id)
+
         if associated_task_id is None:
             continue
 
