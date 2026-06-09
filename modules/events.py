@@ -122,18 +122,37 @@ def get_events_time_tms(events, event_id, s_freq):
 
 
 def get_events_tms_per_task(events, event_id):
-    tms_pulse_task = []
-    events_id = {"tms_pulse_task_right": 1,
-                 "tms_pulse_task_left": 2,
-                 "tms_pulse_task_bilateral": 3}
+    tms_pulses = []
+    events_id = {
+        "tms_pulse_task_right": 1,
+        "tms_pulse_task_left": 2,
+        "tms_pulse_task_bilateral": 3,
+        "tms_pulse_prep_right": 4,
+        "tms_pulse_prep_left": 5,
+        "tms_pulse_prep_bilateral": 6,
+        "tms_pulse_rest_right": 7,
+        "tms_pulse_rest_left": 8,
+        "tms_pulse_rest_bilateral": 9,
+    }
 
     state_event_ids = [event_id[state] for state in states_protocol]
+    task_event_ids = [
+        event_id["task_right"],
+        event_id["task_left"],
+        event_id["task_bilateral"],
+    ]
 
     def get_previous_state(event_index):
         for state_id in range(event_index - 1, -1, -1):
             if events[state_id][2] in state_event_ids:
                 return events[state_id], state_id
         return None, None
+
+    def get_associated_task(event_index):
+        for state_id in range(event_index, len(events)):
+            if events[state_id][2] in task_event_ids:
+                return events[state_id][2]
+        return None
 
     for id, event in enumerate(events):
         if event[2] != event_id["tms_pulse"]:
@@ -143,11 +162,25 @@ def get_events_tms_per_task(events, event_id):
         if previous_state is None:
             continue
 
-        if previous_state[2] == event_id["task_right"]:
-            tms_pulse_task.append([event[0], 0, 1])
-        elif previous_state[2] == event_id["task_left"]:
-            tms_pulse_task.append([event[0], 0, 2])
-        elif previous_state[2] == event_id["task_bilateral"]:
-            tms_pulse_task.append([event[0], 0, 3])
+        associated_task_id = get_associated_task(id)
+        if associated_task_id is None:
+            continue
 
-    return np.array(tms_pulse_task), events_id
+        task_suffix = ""
+        if associated_task_id == event_id["task_right"]:
+            task_suffix = "right"
+        elif associated_task_id == event_id["task_left"]:
+            task_suffix = "left"
+        elif associated_task_id == event_id["task_bilateral"]:
+            task_suffix = "bilateral"
+
+        state_id_val = previous_state[2]
+
+        if state_id_val in task_event_ids:
+            tms_pulses.append([event[0], 0, events_id[f"tms_pulse_task_{task_suffix}"]])
+        elif state_id_val == event_id["prep"]:
+            tms_pulses.append([event[0], 0, events_id[f"tms_pulse_prep_{task_suffix}"]])
+        elif state_id_val == event_id["rest"]:
+            tms_pulses.append([event[0], 0, events_id[f"tms_pulse_rest_{task_suffix}"]])
+
+    return np.array(tms_pulses), events_id
