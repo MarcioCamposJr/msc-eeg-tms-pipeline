@@ -121,6 +121,46 @@ def get_events_time_tms(events, event_id, s_freq):
     return tms_pulse_interval_rest_prep, tms_pulse_interval_prep_task, tms_pulse_interval_task_rest
 
 
+def get_pulse_time_in_state(events, event_id, s_freq):
+    pulse_time_rest = []
+    pulse_time_prep = []
+    pulse_time_task = []
+
+    state_event_ids = [event_id[state] for state in states_protocol]
+    task_event_ids = [
+        event_id["task_right"],
+        event_id["task_left"],
+        event_id["task_bilateral"],
+    ]
+
+    def get_previous_state(event_index):
+        for state_id in range(event_index - 1, -1, -1):
+            if events[state_id][2] in state_event_ids:
+                return events[state_id], state_id
+        return None, None
+
+    for id, event in enumerate(events):
+        if event[2] != event_id["tms_pulse"]:
+            continue
+
+        previous_state, previous_state_id = get_previous_state(id)
+        if previous_state is None:
+            continue
+            
+        time_in_state = (event[0] - previous_state[0]) * (1 / s_freq)
+        
+        state_id_val = previous_state[2]
+        
+        if state_id_val == event_id["rest"]:
+            pulse_time_rest.append(time_in_state)
+        elif state_id_val == event_id["prep"]:
+            pulse_time_prep.append(time_in_state)
+        elif state_id_val in task_event_ids:
+            pulse_time_task.append(time_in_state)
+            
+    return np.array(pulse_time_rest), np.array(pulse_time_prep), np.array(pulse_time_task)
+
+
 def get_events_tms_per_task(events, event_id):
     tms_pulses = []
     events_id = {
