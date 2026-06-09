@@ -51,3 +51,71 @@ def plot_boxplot_with_points(data, labels):
 
     plt.tight_layout()
     plt.show()
+
+import mne
+
+def plot_tep_components_topomap(epochs, components_config, method='evoked'):
+    """
+    Plota um topomap para cada componente do TEP (Potencial Evocado por TMS)
+    baseado na Área sob a Curva (AUC) do sinal retificado em janelas temporais específicas.
+
+    Parâmetros:
+    - epochs: objeto mne.Epochs.
+    - components_config: dict. Chaves são os nomes das componentes (ex: 'N15') 
+                         e os valores são listas/tuplas com [tmin, tmax] em segundos.
+                         Exemplo: {"N15": [0.010, 0.020], "P30": [0.025, 0.035]}
+    - method: 'evoked' (calcula AUC do sinal médio) ou 'epochs' (calcula AUC por época e faz a média).
+    """
+    n_components = len(components_config)
+    fig, axes = plt.subplots(1, n_components, figsize=(4 * n_components, 4))
+    
+    if n_components == 1:
+        axes = [axes]
+        
+    sfreq = epochs.info['sfreq']
+    
+    if method == 'evoked':
+        # Calcula o evoked (média através das épocas) primeiro
+        evoked = epochs.average()
+        
+    for ax, (comp_name, time_window) in zip(axes, components_config.items()):
+        tmin, tmax = time_window
+        
+        if method == 'evoked':
+            # Recorta o sinal evoked para a janela de tempo da componente
+            evoked_cropped = evoked.copy().crop(tmin=tmin, tmax=tmax)
+            # Retifica o sinal (valor absoluto)
+            rectified_data = np.abs(evoked_cropped.data)
+            # Calcula a AUC usando a regra do trapézio
+            auc = np.trapz(rectified_data, dx=1/sfreq, axis=-1)
+            info = evoked_cropped.info
+        elif method == 'epochs':
+            # Recorta as épocas para a janela de tempo
+            epochs_cropped = epochs.copy().crop(tmin=tmin, tmax=tmax)
+            # Retifica o sinal de todas as épocas
+            rectified_data = np.abs(epochs_cropped.get_data())
+            # Calcula a AUC para cada época e tira a média entre elas
+            auc_per_trial = np.trapz(rectified_data, dx=1/sfreq, axis=-1)
+            auc = np.mean(auc_per_trial, axis=0)
+            info = epochs_cropped.info
+        else:
+            raise ValueError("O método deve ser 'evoked' ou 'epochs'.")
+            
+        # Plota o topomap
+        im, _ = mne.viz.plot_topomap(
+            auc, 
+            info, 
+            axes=ax, 
+            show=False,
+            cmap='Reds', # Colormap sequencial pois AUC é sempre positiva
+            extrapolate='local'
+        )
+        
+        ax.set_title(f"{comp_name}\n({tmin*1000:.0f}-{tmax*1000:.0f} ms)")
+        
+        # Adiciona a barra de cores
+        plt.colorbar(im, ax=ax, orientation='vertical', shrink=0.8, label="AUC (V·s)")
+
+    plt.tight_layout()
+    plt.show()
+    return fig
