@@ -2,6 +2,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.integrate import trapezoid
 
 
 def plot_boxplot_with_points(data, labels):
@@ -54,7 +55,7 @@ def plot_boxplot_with_points(data, labels):
 
 import mne
 
-def plot_tep_components_topomap(epochs, components_config, method='evoked'):
+def plot_tep_components_topomap(epochs, components_config, method='evoked', vlim=(None, None), sphere=None):
     """
     Plota um topomap para cada componente do TEP (Potencial Evocado por TMS)
     baseado na Área sob a Curva (AUC) do sinal retificado em janelas temporais específicas.
@@ -63,8 +64,11 @@ def plot_tep_components_topomap(epochs, components_config, method='evoked'):
     - epochs: objeto mne.Epochs.
     - components_config: dict. Chaves são os nomes das componentes (ex: 'N15') 
                          e os valores são listas/tuplas com [tmin, tmax] em segundos.
-                         Exemplo: {"N15": [0.010, 0.020], "P30": [0.025, 0.035]}
-    - method: 'evoked' (calcula AUC do sinal médio) ou 'epochs' (calcula AUC por época e faz a média).
+    - method: 'evoked' (calcula AUC do sinal médio) ou 'epochs' (calcula AUC por época e média).
+    - vlim: tupla (min, max). Controla os limites da escala de cores (colorbar).
+            Ex: (0, 1e-5) ou (None, None) para cálculo automático.
+    - sphere: controla o ajuste da "cabeça fictícia" aos sensores. 
+              Pode ser um float (raio), 'eeglab' ou uma tupla com centro e raio.
     """
     n_components = len(components_config)
     fig, axes = plt.subplots(1, n_components, figsize=(4 * n_components, 4))
@@ -87,7 +91,7 @@ def plot_tep_components_topomap(epochs, components_config, method='evoked'):
             # Retifica o sinal (valor absoluto)
             rectified_data = np.abs(evoked_cropped.data)
             # Calcula a AUC usando a regra do trapézio
-            auc = np.trapz(rectified_data, dx=1/sfreq, axis=-1)
+            auc = trapezoid(rectified_data, dx=1/sfreq, axis=-1)
             info = evoked_cropped.info
         elif method == 'epochs':
             # Recorta as épocas para a janela de tempo
@@ -95,7 +99,7 @@ def plot_tep_components_topomap(epochs, components_config, method='evoked'):
             # Retifica o sinal de todas as épocas
             rectified_data = np.abs(epochs_cropped.get_data())
             # Calcula a AUC para cada época e tira a média entre elas
-            auc_per_trial = np.trapz(rectified_data, dx=1/sfreq, axis=-1)
+            auc_per_trial = trapezoid(rectified_data, dx=1/sfreq, axis=-1)
             auc = np.mean(auc_per_trial, axis=0)
             info = epochs_cropped.info
         else:
@@ -108,7 +112,9 @@ def plot_tep_components_topomap(epochs, components_config, method='evoked'):
             axes=ax, 
             show=False,
             cmap='Reds', # Colormap sequencial pois AUC é sempre positiva
-            extrapolate='local'
+            extrapolate='head',
+            vlim=vlim,     # <-- Adicionado para controle da colorbar
+            sphere=sphere  # <-- Adicionado para melhorar ajuste da cabeça
         )
         
         ax.set_title(f"{comp_name}\n({tmin*1000:.0f}-{tmax*1000:.0f} ms)")
@@ -118,4 +124,4 @@ def plot_tep_components_topomap(epochs, components_config, method='evoked'):
 
     plt.tight_layout()
     plt.show()
-    return fig
+    return fig

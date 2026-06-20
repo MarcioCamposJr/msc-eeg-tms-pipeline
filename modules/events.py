@@ -148,6 +148,9 @@ def get_pulse_time_in_state(events, event_id, s_freq):
             continue
             
         time_in_state = (event[0] - previous_state[0]) * (1 / s_freq)
+
+        if time_in_state > 20:
+            continue
         
         state_id_val = previous_state[2]
         

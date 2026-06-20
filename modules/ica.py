@@ -3,7 +3,7 @@ from mne.preprocessing import ICA
 from mne_icalabel import label_components
 
 class ICAProcessor:
-    def __init__(self, n_components=0.99, random_state=97, max_iter='auto', method="picard"):
+    def __init__(self, n_components=0.99, random_state=97, max_iter='auto', method="infomax"):
         fit_params = dict(extended=True) if method == "infomax" else None
         
         self.ica = ICA(
