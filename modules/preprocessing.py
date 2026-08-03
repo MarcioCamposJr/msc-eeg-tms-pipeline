@@ -115,3 +115,35 @@ def fix_stim_artifact_cubic(inst, events=None, event_id=None, tmin=0.0, tmax=0.0
                 data[:, :, x_interp] = cs(x_interp)
                 
     return inst
+
+from scipy import signal
+
+def custom_lowpass_butterworth(epochs, h_freq=80.0, order=4):
+    """
+    Aplica um filtro passa-baixa IIR (Butterworth) com distorção de fase zero 
+    em um objeto MNE Epochs.
+    """
+    # Cria uma cópia para preservar os dados originais
+    epochs_filtered = epochs.copy()
+    
+    # Extrai a frequência de amostragem
+    sfreq = epochs_filtered.info['sfreq']
+    
+    # Calcula a frequência de Nyquist
+    nyq = sfreq / 2.0
+    
+    # Normaliza a frequência de corte
+    wn = h_freq / nyq
+    
+    # Cria os coeficientes do filtro Butterworth (b, a)
+    b, a = signal.butter(N=order, Wn=wn, btype='low')
+    
+    # Função wrapper para o SciPy filtfilt
+    def apply_filtfilt(x):
+        # filtfilt roda o filtro forward e backward para zerar o atraso de fase
+        return signal.filtfilt(b, a, x)
+    
+    # Aplica a função em todos os dados do objeto Epochs
+    epochs_filtered.apply_function(apply_filtfilt, picks='all')
+    
+    return epochs_filtered

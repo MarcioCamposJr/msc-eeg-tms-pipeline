@@ -1,5 +1,8 @@
 import numpy as np
 import mne
+from scipy.integrate import trapezoid
+
+from config import tep_components_windows
 
 def cluster_epochs_by_roi(epochs, roi_dict):
     # Extrair os dados: formato (n_epocas, n_canais, n_tempos)
@@ -44,3 +47,52 @@ def cluster_epochs_by_roi(epochs, roi_dict):
     )
     
     return new_epochs
+
+def get_data_evokeds_condition(epochs, roi, time_cropped):
+    picks = [ch for ch in roi if ch in epochs.ch_names]
+    tmin, tmax = time_cropped
+    times = epochs.times[(epochs.times >= tmin) & (epochs.times <= tmax)]
+
+    evokeds_prep_dict= {}
+    evokeds_task_dict = {}
+    evokeds_rest_dict = {}
+
+    for state in list(epochs.event_id.keys()):
+        if 'prep' in state:
+            evokeds_prep_dict[check_hand(state)] = epochs[state].average().pick(picks).crop(time_cropped[0], time_cropped[1]).data
+        elif 'task' in state:
+            evokeds_task_dict[check_hand(state)] = epochs[state].average().pick(picks).crop(time_cropped[0], time_cropped[1]).data
+        elif 'rest' in state:
+            evokeds_rest_dict[check_hand(state)] = epochs[state].average().pick(picks).crop(time_cropped[0], time_cropped[1]).data
+
+    return evokeds_prep_dict, evokeds_task_dict, evokeds_rest_dict, times
+
+def check_hand(state):
+    if 'right' in state:
+        return 'Right hand'
+    elif 'left' in state:
+        return 'Left hand'
+    elif 'bilateral' in state:
+        return 'Bilateral hand'
+    
+def get_AUC_tep_components(evokeds_dict, times, sfreq):
+
+    def get_idx_time_window(times, tmin, tmax):
+        idx_min = np.abs(times - tmin).argmin()
+        idx_max = np.abs(times - tmax).argmin()
+        return idx_min, idx_max
+    
+    auc_components = {}
+    for state, data in evokeds_dict.items():
+        auc_components[state] = {}
+        for comp_name, time_window in tep_components_windows.items():
+            tmin, tmax = time_window
+            idx_min, idx_max = get_idx_time_window(times, tmin, tmax)
+            media_canais = np.mean(data, axis=0)
+            data_cropped = media_canais[idx_min:idx_max]
+            dados_uv = data_cropped * 1e6 
+            rectified_data = np.abs(dados_uv)
+            auc = trapezoid(rectified_data, dx=1000/sfreq, axis=-1)
+            auc_components[state][comp_name] = auc
+
+    return auc_components
