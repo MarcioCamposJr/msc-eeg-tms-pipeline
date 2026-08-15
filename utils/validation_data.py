@@ -71,3 +71,11 @@ def filter_stationary_epochs(epochs, p_value_threshold=0.05, channel_threshold=0
     stationary_epochs = epochs[epochs_to_keep]
     
     return stationary_epochs
+
+def check_hand(state):
+    if 'right' in state:
+        return 'Right hand'
+    elif 'left' in state:
+        return 'Left hand'
+    elif 'bilateral' in state:
+        return 'Bilateral hand'

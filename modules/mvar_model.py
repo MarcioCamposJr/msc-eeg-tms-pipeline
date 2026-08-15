@@ -1,9 +1,12 @@
 from scot.var import VAR
 from scot.varica import mvarica
 from scot.connectivity import connectivity
-from scot.connectivity_statistics import surrogate_connectivity, significance_fdr
+from scot.connectivity_statistics import bootstrap_connectivity as bc, significance_fdr, surrogate_connectivity
+from scot.datatools import randomize_phase
 
 import numpy as np
+from joblib import Parallel, delayed
+import scipy
 
 from utils.validation_model import biggest_eigenvector_mvar, calculate_bic
 
@@ -16,8 +19,28 @@ class mvar_optimized():
         self.fitted = False
         self.result_var = None
         self.optimal_order = None
+        self.delta = None
+
+        self.__var_base = None
     
-    def find_order_delta(self, min_p=7, max_p=25, deltas = [0.001, 0.01, 0.1], top_k=5):
+    def find_order_delta(self, min_p=7, max_p=25, deltas = [0.001, 0.01, 0.1], top_k=5, n_jobs=-1):
+
+        var_optimizer = VAR(model_order=min_p)
+
+        var_optimizer.optimize_order(self.data, min_p=min_p, max_p=max_p, n_jobs=n_jobs)
+        optimal_p = var_optimizer.p
+
+        print(f"Ordem ótima encontrada: p={optimal_p}")
+        print(f"Otimizando regularização (delta) via busca binária...")
+
+        var_optimizer.optimize_delta_bisection(self.data)
+        optimal_delta = var_optimizer.delta
+
+        print(f"Delta ótimo encontrado: delta={optimal_delta:.5f}")
+
+        return [{"order": optimal_p, "delta": optimal_delta, "bic": None}]
+        
+
         results = []
 
         for delta in deltas:
@@ -45,15 +68,17 @@ class mvar_optimized():
         return [{"order": p, "delta": delta, "bic": bic} for bic, p, delta in top_results]
     
     def fit_model(self, optimal_order, delta):
-        var_base = VAR(model_order=optimal_order, delta=delta)
+        self.__var_base = VAR(model_order=optimal_order, delta=delta)
         self.result_var = mvarica(
                     x=self.data,
-                    var=var_base,
+                    var=self.__var_base,
                     reducedim='no_pca',
                     optimize_var=False,
                     varfit='ensemble',
                 )
         self.fitted = True
+        self.optimal_order = optimal_order 
+        self.delta = delta
         print("Model fitted with optimal order and delta.")
         self.__validate_model()
     
@@ -103,22 +128,31 @@ class mvar_optimized():
 
         return connectivity_result[measure], pdc_matrix_eeg
     
-    def validation_connectivity(self, real_matric, measure='PDC', n_surrogates=300, alpha=0.05, nfft=512):
+    def validation_connectivity(self, real_matric, measure='PDC', n_surrogates=300, alpha=0.05, nfft=512, freq_min=8.0, freq_max=30.0, n_jobs=-1):
         if not self.fitted:
             raise ValueError("Model must be fitted before validating connectivity.")
         
-        var_eeg = self.result_var.a
+        if self.optimal_order is None or self.delta is None:
+            raise ValueError("optimal_order or delta is None! Did you forget to save them in fit_model?")
+        
+        print(f"Performing rigorous surrogate connectivity analysis with {n_surrogates} surrogates using MVARICA...")
+        print(f"Parallelizing across {n_jobs if n_jobs != -1 else 'ALL'} CPU cores...")
 
-        print(f"Performing surrogate connectivity analysis with {n_surrogates} surrogates...")
-        surrogate_results = surrogate_connectivity(
-            measure_names=[measure], 
-            data=self.data,      
-            var=var_eeg,
-            nfft=nfft, 
-            repeats=n_surrogates
+        # Dispara os cálculos paralelos. 
+        # Note que passamos os atributos de 'self' diretamente como parâmetros.
+        surrogate_matrices = Parallel(n_jobs=n_jobs, verbose=10)(
+            delayed(_worker_compute_surrogate)(
+                self.data,           # Apenas a matriz numpy
+                self.sfreq,          # Frequência de amostragem
+                self.optimal_order,  # Ordem do modelo
+                self.delta,          # Delta da regularização
+                measure, nfft, freq_min, freq_max
+            )
+            for _ in range(n_surrogates)
         )
 
-        matric_surrogates = np.abs(surrogate_results[measure])
+        matric_surrogates = np.array(surrogate_matrices)
+        
         p_values = np.mean(matric_surrogates >= real_matric, axis=0)
 
         s_fdr = significance_fdr(p_values, alpha)
@@ -130,17 +164,14 @@ class mvar_optimized():
     def bootstrap_connectivity(self, measure='PDC', n_bootstraps=300, nfft=512):
         if not self.fitted:
             raise ValueError("Model must be fitted before performing bootstrap analysis.")
-        
-        var_eeg = self.result_var.a
 
         print(f"Performing bootstrap connectivity analysis with {n_bootstraps} bootstraps...")
-        bootstrap_results = surrogate_connectivity(
-            measure_names=[measure], 
+        bootstrap_results = bc(
+            measures=[measure], 
             data=self.data,      
-            var=var_eeg,
+            var=self.__var_base,
             nfft=nfft, 
             repeats=n_bootstraps,
-            method='bootstrap'
         )
 
         # Calcula os limites (2.5% e 97.5% criam um intervalo de 95%)
@@ -148,3 +179,50 @@ class mvar_optimized():
         ci_upper = np.percentile(bootstrap_results[measure], 97.5, axis=0)
 
         return bootstrap_results[measure], ci_lower, ci_upper
+
+
+def _worker_compute_surrogate(data, sfreq, optimal_order, delta, measure, nfft, freq_min, freq_max):
+    scipy.shape = np.shape
+    scipy.cov = np.cov
+    scipy.zeros = np.zeros
+    scipy.ceil = np.ceil
+    scipy.atleast_3d = np.atleast_3d    
+    scipy.eye = np.eye
+    scipy.sum = np.sum
+    scipy.sqrt = np.sqrt
+    scipy.exp = np.exp
+    scipy.sign = np.sign
+
+    # Embaralhar fases
+    shuffled_data = randomize_phase(data)
+    
+    # Criamos o motor VAR aqui dentro para cada núcleo ter o seu limpo!
+    var_base = VAR(model_order=optimal_order, delta=delta)
+    
+    # Ajustar o MVARICA
+    res_var_surrogate = mvarica(
+        x=shuffled_data,
+        var=var_base,
+        reducedim='no_pca',
+        optimize_var=False,
+        varfit='ensemble',
+    )
+    
+    # Extrair a conectividade do EEG
+    var_eeg_falso = res_var_surrogate.a
+    conn_falsa = connectivity(
+        b=var_eeg_falso.coef,
+        c=var_eeg_falso.rescov,
+        nfft=nfft,
+        measure_names=[measure]
+    )
+    
+    # Processamento da banda de frequência
+    freqs = np.linspace(0, sfreq / 2, nfft)
+    idx_banda = np.where((freqs >= freq_min) & (freqs <= freq_max))[0]
+    
+    pdc_falso_banda = conn_falsa[measure][:, :, idx_banda]
+    pdc_falso_matrix = np.mean(pdc_falso_banda, axis=2)
+    np.fill_diagonal(pdc_falso_matrix, 0)
+    
+    return np.abs(pdc_falso_matrix)

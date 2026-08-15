@@ -1,18 +1,22 @@
 import numpy as np
 import mne
 from scipy.integrate import trapezoid
+from sklearn.decomposition import PCA
+from mne.decoding import UnsupervisedSpatialFilter
 
+from utils.validation_data import check_hand
 from config import tep_components_windows
 
-def cluster_epochs_by_roi(epochs, roi_dict):
+def cluster_epochs_by_roi(epochs, roi_dict, method='mean'):
     # Extrair os dados: formato (n_epocas, n_canais, n_tempos)
     data = epochs.get_data(copy=True)
     ch_names = epochs.ch_names
     
     new_data = []
     new_ch_names = []
-    
+
     for roi_name, channels in roi_dict.items():
+
         # Encontrar os índices dos canais do dicionário que realmente existem nos seus dados
         ch_indices = [ch_names.index(ch) for ch in channels if ch in ch_names]
         
@@ -22,7 +26,16 @@ def cluster_epochs_by_roi(epochs, roi_dict):
             
         # Tirar a média dos canais deste cluster ao longo do eixo 1 (Canais)
         # O resultado será (n_epocas, n_tempos)
-        roi_data = np.mean(data[:, ch_indices, :], axis=1)
+        if method == 'mean':
+            roi_data = np.mean(data[:, ch_indices, :], axis=1)
+        elif method == 'PCA':
+            if len(ch_indices) > 1:
+                pca = PCA(n_components=1)                
+                spatial_filter = UnsupervisedSpatialFilter(pca, average=False)
+                pca_data_3d = spatial_filter.fit_transform(data[:, ch_indices, :])
+                roi_data = pca_data_3d.squeeze(axis=1)
+            else:
+                roi_data = data[:, ch_indices, :].squeeze()
         
         new_data.append(roi_data)
         new_ch_names.append(roi_name)
@@ -66,14 +79,6 @@ def get_data_evokeds_condition(epochs, roi, time_cropped):
             evokeds_rest_dict[check_hand(state)] = epochs[state].average().pick(picks).crop(time_cropped[0], time_cropped[1]).data
 
     return evokeds_prep_dict, evokeds_task_dict, evokeds_rest_dict, times
-
-def check_hand(state):
-    if 'right' in state:
-        return 'Right hand'
-    elif 'left' in state:
-        return 'Left hand'
-    elif 'bilateral' in state:
-        return 'Bilateral hand'
     
 def get_AUC_tep_components(evokeds_dict, times, sfreq):
 
