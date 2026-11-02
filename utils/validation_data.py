@@ -1,75 +1,81 @@
 import numpy as np
 import mne
 from statsmodels.tsa.stattools import adfuller
+from joblib import Parallel, delayed
 
-def filter_stationary_epochs(epochs, p_value_threshold=0.05, channel_threshold=0.95):
+def _is_stationary(time_series, p_value_threshold):
     """
-    Tests the stationarity of each trial (epoch) in MNE Epochs using the ADF test.
-    
+    Função auxiliar para rodar no worker paralelo.
+    Testa a estacionariedade de uma única série temporal.
+    """
+    try:
+        # adfuller retorna uma tupla onde o índice [1] é o p-valor
+        p_value = adfuller(time_series)[1]
+        return p_value < p_value_threshold
+    except ValueError:
+        # Lida com casos de variância zero (sinal constante/flat)
+        return False
+
+def filter_stationary_epochs(epochs, p_value_threshold=0.05, channel_threshold=0.95, n_jobs=-1):
+    """
+    Tests the stationarity of each trial (epoch) in MNE Epochs using the ADF test in parallel.
+
     Parameters:
     -----------
     epochs : mne.Epochs
         The MNE Epochs object containing the data.
     p_value_threshold : float
-        P-value threshold for the Augmented Dickey-Fuller (ADF) test. 
-        If p_value < threshold, the time series is considered stationary (default: 0.05).
+        P-value threshold for the Augmented Dickey-Fuller (ADF) test.
     channel_threshold : float
-        Minimum proportion (from 0 to 1) of channels that must be stationary 
-        for the epoch to be kept. The default 0.95 requires at least 95% 
-        of the channels in the current epoch to be stationary.
-        
+        Minimum proportion (from 0 to 1) of channels that must be stationary
+        for the epoch to be kept.
+    n_jobs : int
+        Number of CPU cores to use. -1 uses all available cores (default: -1).
+
     Returns:
     --------
     stationary_epochs : mne.Epochs
         A new MNE Epochs object containing only the epochs that passed the test.
     """
-    # Extract data as a NumPy array with shape (n_epochs, n_channels, n_times).
-    # We select only the 'eeg' channels to avoid testing reference/stim channels.
-    data = epochs.get_data(picks='eeg') 
+    # Extrai os dados: shape (n_epochs, n_channels, n_times)
+    data = epochs.get_data(picks='eeg')
     n_epochs, n_channels, n_times = data.shape
-    
-    epochs_to_keep = []
-    
-    print("Testing stationarity (ADF Test)... This might take a few seconds depending on data size.")
-    
-    for i in range(n_epochs):
-        stationary_channels_count = 0
-        
-        for j in range(n_channels):
-            # Get the time series for a single channel (j) in the current epoch (i)
-            time_series = data[i, j, :]
-            
-            try:
-                # Run the ADF test. The second return value [1] is the p-value.
-                # adfuller can fail if the series has zero variance (e.g., constant line)
-                adf_result = adfuller(time_series)
-                p_value = adf_result[1]
-                
-                # If p-value < threshold, we reject the null hypothesis of non-stationarity
-                if p_value < p_value_threshold:
-                    stationary_channels_count += 1
-                    
-            except ValueError:
-                # If the test raises an error (e.g. zero variance), we consider the channel non-stationary
-                pass
-                
-        # Calculate the proportion of stationary channels for the current epoch
-        prop_stationary = stationary_channels_count / n_channels
-        
-        # If the proportion meets our threshold, record the epoch index to keep it
-        if prop_stationary >= channel_threshold:
-            epochs_to_keep.append(i)
-            
+
+    print(f"Testing stationarity (ADF Test) on {n_epochs * n_channels} signals using {n_jobs if n_jobs != -1 else 'all'} CPU cores...")
+
+    # ACHATAMENTO (FLATTEN):
+    # Transforma o array 3D em 2D para eliminar os loops aninhados.
+    # O reshape cria apenas uma "view" (visão), não duplicando os dados na memória RAM.
+    flat_data = data.reshape(-1, n_times)
+
+    # PARALELISMO:
+    # Dispara o cálculo em múltiplos núcleos simultaneamente.
+    # Retorna uma lista 1D de booleanos (True/False)
+    is_stationary_flat = Parallel(n_jobs=n_jobs)(
+        delayed(_is_stationary)(ts, p_value_threshold) for ts in flat_data
+    )
+
+    # VOLTANDO AO FORMATO ORIGINAL:
+    # Transforma a lista de resultados (1D) de volta para o formato (n_epochs, n_channels)
+    is_stationary_matrix = np.array(is_stationary_flat).reshape(n_epochs, n_channels)
+
+    # VETORIZAÇÃO COM NUMPY:
+    # No Python, True = 1 e False = 0.
+    # Portanto, a média no eixo 1 (canais) dá exatamente a proporção de canais estacionários por epoch!
+    prop_stationary = is_stationary_matrix.mean(axis=1)
+
+    # Encontra os índices das epochs que atingiram o limite mínimo (channel_threshold)
+    epochs_to_keep = np.where(prop_stationary >= channel_threshold)[0]
+
     # Summary of the operation
     print("\n--- Summary ---")
     print(f"Total epochs evaluated: {n_epochs}")
     print(f"Stationary epochs KEPT: {len(epochs_to_keep)}")
     print(f"Non-stationary epochs DROPPED: {n_epochs - len(epochs_to_keep)}")
-    
-    # MNE allows slicing an Epochs object by passing a list of indices.
-    # This returns a new Epochs object containing only the trials of interest.
+
+    # Filtra e retorna apenas as epochs desejadas
     stationary_epochs = epochs[epochs_to_keep]
-    
+
     return stationary_epochs
 
 def check_hand(state):
