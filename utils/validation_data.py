@@ -85,3 +85,55 @@ def check_hand(state):
         return 'Left hand'
     elif 'bilateral' in state:
         return 'Bilateral hand'
+
+
+def iterative_zscore_rejection(data, threshold=2.5):
+    """
+    Iteratively reject epochs based on their standard deviation.
+
+    Parameters
+    ----------
+    data : ndarray
+        Shape (n_epochs, n_channels, n_times).
+    threshold : float
+        Z-score threshold for rejection.
+
+    Returns
+    -------
+    clean_data : ndarray
+        Data after rejection.
+    kept_indices : ndarray
+        Original indices of retained epochs.
+    rejected_indices : ndarray
+        Original indices of rejected epochs.
+    """
+    epoch_std = np.std(data, axis=(1, 2))
+
+    kept_indices = np.arange(len(data))
+    rejected_indices = []
+
+    while len(kept_indices) > 1:
+        current_std = epoch_std[kept_indices]
+
+        mean = np.mean(current_std)
+        std = np.std(current_std)
+
+        if std == 0:
+            break
+
+        z_scores = (current_std - mean) / std
+
+        # Reject only high-variance epochs
+        outliers = z_scores > threshold
+
+        if not np.any(outliers):
+            break
+
+        rejected_indices.extend(kept_indices[outliers])
+        kept_indices = kept_indices[~outliers]
+
+    return (
+        data[kept_indices],
+        kept_indices,
+        np.array(rejected_indices, dtype=int),
+    )
