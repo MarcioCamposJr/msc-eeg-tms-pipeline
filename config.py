@@ -11,12 +11,24 @@ states_protocol = ["rest", "prep", "task_right", "task_left", "task_bilateral"]
 
 tep_components_windows = {
     "N15": [0.010, 0.020],
-    "P30": [0.025, 0.035],
-    "N45": [0.035, 0.055],
-    "P60": [0.055, 0.075],
-    "N100": [0.090, 0.125],
-    "P200": [0.150, 0.220]
+    "P30": [0.02, 0.04],
+    "N45": [0.04, 0.055],
+    "P60": [0.05, 0.07],
+    "N100": [0.070, 0.150],
+    "P200": [0.150, 0.240]
 }
+
+events_tms_per_condition = {
+        "tms_pulse_task_right": 1,
+        "tms_pulse_task_left": 2,
+        "tms_pulse_task_bilateral": 3,
+        "tms_pulse_prep_right": 4,
+        "tms_pulse_prep_left": 5,
+        "tms_pulse_prep_bilateral": 6,
+        "tms_pulse_rest_right": 7,
+        "tms_pulse_rest_left": 8,
+        "tms_pulse_rest_bilateral": 9,
+    }
 
 
 # Dicionário de 20 ROIs otimizado para tarefas motoras e TMS

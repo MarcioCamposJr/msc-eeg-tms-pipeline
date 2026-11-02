@@ -192,10 +192,7 @@ def plot_tep_conditions(evokeds_prep_dict, evokeds_task_dict, evokeds_rest_dict,
         ('Execution', evokeds_task_dict)
     ]
     
-    ch_names = ''
-    for ch in roi_ch:
-        ch_names += ch + ', '
-    ch_names = ch_names[:-2]
+    ch_names = ', '.join(roi_ch)
 
     # Criar a figura com 3 subplots verticais
     fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)

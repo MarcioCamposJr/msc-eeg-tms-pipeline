@@ -1,6 +1,6 @@
 import numpy as np
 
-from config import states_protocol
+from config import states_protocol, events_tms_per_condition
 
 def get_events_time(events, event_id, s_freq):
     rest = []
@@ -67,17 +67,11 @@ def get_events_time_tms(events, event_id, s_freq):
     ]
     state_name_by_id = {event_id[state]: state for state in states_protocol}
 
-    def get_previous_state(event_index):
-        for state_id in range(event_index - 1, -1, -1):
-            if events[state_id][2] in state_event_ids:
-                return events[state_id], state_id
-        return None, None
-
     for id, event in enumerate(events):
         if event[2] != event_id["tms_pulse"]:
             continue
 
-        previous_state, previous_state_id = get_previous_state(id)
+        previous_state, previous_state_id = get_previous_state(events, state_event_ids, id)
 
         next_pulse = None
         next_pulse_id = None
@@ -90,7 +84,7 @@ def get_events_time_tms(events, event_id, s_freq):
         if previous_state is None or next_pulse is None:
             continue
 
-        next_pulse_state, next_pulse_state_id = get_previous_state(next_pulse_id)
+        next_pulse_state, next_pulse_state_id = get_previous_state(events, state_event_ids, next_pulse_id)
         if next_pulse_state is None:
             continue
 
@@ -133,17 +127,11 @@ def get_pulse_time_in_state(events, event_id, s_freq):
         event_id["task_bilateral"],
     ]
 
-    def get_previous_state(event_index):
-        for state_id in range(event_index - 1, -1, -1):
-            if events[state_id][2] in state_event_ids:
-                return events[state_id], state_id
-        return None, None
-
     for id, event in enumerate(events):
         if event[2] != event_id["tms_pulse"]:
             continue
 
-        previous_state, previous_state_id = get_previous_state(id)
+        previous_state, previous_state_id = get_previous_state(events, state_event_ids, id)
         if previous_state is None:
             continue
             
@@ -166,17 +154,6 @@ def get_pulse_time_in_state(events, event_id, s_freq):
 
 def get_events_tms_per_task(events, event_id):
     tms_pulses = []
-    events_id = {
-        "tms_pulse_task_right": 1,
-        "tms_pulse_task_left": 2,
-        "tms_pulse_task_bilateral": 3,
-        "tms_pulse_prep_right": 4,
-        "tms_pulse_prep_left": 5,
-        "tms_pulse_prep_bilateral": 6,
-        "tms_pulse_rest_right": 7,
-        "tms_pulse_rest_left": 8,
-        "tms_pulse_rest_bilateral": 9,
-    }
 
     state_event_ids = [event_id[state] for state in states_protocol]
     task_event_ids = [
@@ -184,12 +161,6 @@ def get_events_tms_per_task(events, event_id):
         event_id["task_left"],
         event_id["task_bilateral"],
     ]
-
-    def get_previous_state(event_index):
-        for state_id in range(event_index - 1, -1, -1):
-            if events[state_id][2] in state_event_ids:
-                return events[state_id], state_id
-        return None, None
 
     def get_associated_task(event_index):
         for state_id in range(event_index, len(events)):
@@ -201,7 +172,7 @@ def get_events_tms_per_task(events, event_id):
         if event[2] != event_id["tms_pulse"]:
             continue
 
-        previous_state, previous_state_id = get_previous_state(id)
+        previous_state, previous_state_id = get_previous_state(events, state_event_ids, id)
         if previous_state is None:
             continue
 
@@ -226,10 +197,17 @@ def get_events_tms_per_task(events, event_id):
         state_id_val = previous_state[2]
 
         if state_id_val in task_event_ids:
-            tms_pulses.append([event[0], 0, events_id[f"tms_pulse_task_{task_suffix}"]])
+            tms_pulses.append([event[0], 0, events_tms_per_condition[f"tms_pulse_task_{task_suffix}"]])
         elif state_id_val == event_id["prep"]:
-            tms_pulses.append([event[0], 0, events_id[f"tms_pulse_prep_{task_suffix}"]])
+            tms_pulses.append([event[0], 0, events_tms_per_condition[f"tms_pulse_prep_{task_suffix}"]])
         elif state_id_val == event_id["rest"]:
-            tms_pulses.append([event[0], 0, events_id[f"tms_pulse_rest_{task_suffix}"]])
+            tms_pulses.append([event[0], 0, events_tms_per_condition[f"tms_pulse_rest_{task_suffix}"]])
 
-    return np.array(tms_pulses), events_id
+    return np.array(tms_pulses), events_tms_per_condition
+
+
+def get_previous_state(events, state_event_ids, event_index):
+    for state_id in range(event_index - 1, -1, -1):
+        if events[state_id][2] in state_event_ids:
+            return events[state_id], state_id
+    return None, None

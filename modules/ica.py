@@ -45,8 +45,6 @@ class ICAProcessor:
             if label in ['eye blink', 'muscle artifact'] and prob >= threshold:
                 exclude.append(i)
                 print(f"-> Componente {i} excluída: {label} (Probabilidade: {prob:.2f})")
-            else:
-                pass 
                 
         evoked = self.epoch.average()
         self.ica.plot_overlay(evoked, exclude=exclude, picks="eeg")

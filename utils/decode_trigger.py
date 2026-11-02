@@ -12,11 +12,11 @@ def decode_8bit_trigger(trigger_value):
             return "tms_pulse"
     return "Unknown Trigger"
 
-def convert_dict_trigger(dict, function= None):
+def convert_dict_trigger(input_dict, function= None):
     function = decode_8bit_trigger if function is None else function
     converted_dict = {}
     renamed_dict = {}
-    for key, value in dict.items():
+    for key, value in input_dict.items():
         converted_key = function(key)
         converted_dict[converted_key] = value
         renamed_dict[key] = converted_key
