@@ -23,3 +23,8 @@ dependencies = [
     "statsmodels>=0.14.6",
     "torch>=2.8.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["modules", "modules.*", "templates", "templates.*"]
+namespaces = true
